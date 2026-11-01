@@ -12,7 +12,7 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
  *   at the edge before claiming fleet-wide enforcement.
  */
 
-export type SecurityLayer = 'BASELINE' | 'GUARDED' | 'CONTAINMENT' | 'QUARANTINE';
+export type SecurityLayer = 'BASELINE' | 'GUARDED' | 'CONTAINMENT' | 'QUARANTINE' | 'RECOVERY';
 type SecurityEventType = 'PROBE_PATH' | 'OWNER_AUTH_FAILURE' | 'RATE_LIMIT' | 'METHOD_BLOCKED';
 
 interface ClientState {
@@ -21,6 +21,7 @@ interface ClientState {
   probes: number[];
   rateLimitEvents: number[];
   quarantineUntil: number;
+  recoveryUntil: number;
   lastSeen: number;
 }
 
@@ -35,6 +36,7 @@ interface SecurityEvent {
 const WINDOW_MS = 60_000;
 const AUTH_WINDOW_MS = 15 * 60_000;
 const QUARANTINE_MS = 15 * 60_000;
+const RECOVERY_MS = 5 * 60_000;
 const MAX_CLIENTS = 20_000;
 const MAX_EVENTS = 250;
 
@@ -47,6 +49,7 @@ export const SECURITY_LAYER_POLICY: Readonly<Record<SecurityLayer, {
   GUARDED: Object.freeze({ maxApiRequestsPerMinute: 90, description: 'Reduced API budget after suspicious activity.' }),
   CONTAINMENT: Object.freeze({ maxApiRequestsPerMinute: 30, description: 'Strict API budget while the source is contained.' }),
   QUARANTINE: Object.freeze({ maxApiRequestsPerMinute: 0, description: 'API calls denied for the quarantined source, except health checks.' }),
+  RECOVERY: Object.freeze({ maxApiRequestsPerMinute: 60, description: 'Five-minute probation after quarantine; reduced API budget while fresh signals are monitored.' }),
 });
 
 const PROBE_PATH_PATTERNS = [
@@ -97,7 +100,7 @@ export class AdaptiveSecurityService {
     const now = Date.now();
     let state = this.clients.get(key);
     if (!state) {
-      state = { apiRequests: [], authFailures: [], probes: [], rateLimitEvents: [], quarantineUntil: 0, lastSeen: now };
+      state = { apiRequests: [], authFailures: [], probes: [], rateLimitEvents: [], quarantineUntil: 0, recoveryUntil: 0, lastSeen: now };
       this.clients.set(key, state);
     }
     state.lastSeen = now;
@@ -128,12 +131,28 @@ export class AdaptiveSecurityService {
     keepRecent(state.rateLimitEvents, now, 5 * WINDOW_MS);
 
     if (state.quarantineUntil > now) return 'QUARANTINE';
+
+    // Enter a bounded recovery probation once a quarantine expires. Clear only the
+    // signals that caused the prior quarantine so stale timestamps cannot immediately
+    // re-trigger the same quarantine forever. Fresh signals during recovery still escalate.
+    if (state.quarantineUntil > 0 && state.quarantineUntil <= now) {
+      state.quarantineUntil = 0;
+      state.authFailures.length = 0;
+      state.probes.length = 0;
+      state.rateLimitEvents.length = 0;
+      state.recoveryUntil = now + RECOVERY_MS;
+    }
+
     if (state.authFailures.length >= 10 || state.probes.length >= 8 || state.rateLimitEvents.length >= 8) {
       state.quarantineUntil = now + QUARANTINE_MS;
+      state.recoveryUntil = 0;
       return 'QUARANTINE';
     }
     if (state.authFailures.length >= 6 || state.probes.length >= 5 || state.rateLimitEvents.length >= 4) return 'CONTAINMENT';
     if (state.authFailures.length >= 3 || state.probes.length >= 2 || state.rateLimitEvents.length >= 2) return 'GUARDED';
+
+    if (state.recoveryUntil > now) return 'RECOVERY';
+    if (state.recoveryUntil > 0 && state.recoveryUntil <= now) state.recoveryUntil = 0;
     return 'BASELINE';
   }
 
@@ -186,7 +205,7 @@ export class AdaptiveSecurityService {
     recentEvents: SecurityEvent[];
   } {
     const now = Date.now();
-    const layers: Record<SecurityLayer, number> = { BASELINE: 0, GUARDED: 0, CONTAINMENT: 0, QUARANTINE: 0 };
+    const layers: Record<SecurityLayer, number> = { BASELINE: 0, GUARDED: 0, CONTAINMENT: 0, QUARANTINE: 0, RECOVERY: 0 };
     let activeQuarantines = 0;
     for (const state of this.clients.values()) {
       const layer = this.layerForState(state, now);

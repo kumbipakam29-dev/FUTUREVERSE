@@ -52,3 +52,12 @@ The existing security review PR #2 remains draft/unmerged and main was not chang
 5. Add creative provider adapters only after credentials, quotas, licensing and real render tests are configured.
 6. Add live YAGYX RPC/chain verification and operator-run infrastructure checks.
 7. Add shared rate-limit/approval storage, MFA/passkeys, CI, dependency/SBOM scan and independent security review before deployment.
+
+
+## v24 quarantine recovery hardening
+
+- Added a five-minute RECOVERY layer after the 15-minute source quarantine expires.
+- Clears only the stale counters that triggered the completed quarantine, preventing stale-event re-quarantine loops.
+- Recovery remains rate-limited to 60 API requests/minute; fresh suspicious activity continues to escalate through GUARDED, CONTAINMENT and QUARANTINE.
+- Added `test/adaptive_quarantine_recovery_check.mjs` for quarantine expiry, stale-signal reset, five-minute probation, clean return to BASELINE, and fresh-signal re-escalation.
+- This GitHub-only patch has not yet been executed in the full application workspace; run the recovery test and complete security suite after syncing the source archive.

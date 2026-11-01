@@ -24,3 +24,8 @@ The v23 source candidate integrates the adaptive service and CSRF guard into the
 - Download nonces do not appear in browser URLs.
 
 Adaptive client state is process-local. Multi-replica production requires a shared atomic store or trusted managed edge rate-limiting with verified proxy semantics. App middleware is not a WAF, DDoS service, or guarantee of being unhackable.
+
+
+## v24 recovery test
+
+Run `node test/adaptive_quarantine_recovery_check.mjs` in the project workspace after the v24 source patch is synced. The test uses a controlled clock and verifies quarantine expiry, bounded recovery, stale counter reset, return to BASELINE, and re-escalation on fresh signals.
