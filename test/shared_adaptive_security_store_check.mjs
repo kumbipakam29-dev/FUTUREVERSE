@@ -142,7 +142,7 @@ try {
   assert.equal(unavailableResponse.statusCode, 503);
   assert.equal(unavailableResponse.body.code, 'SECURITY_STORE_UNAVAILABLE');
 
-  console.log('SHARED_ADAPTIVE_SECURITY_STORE_CHECK==PASS (26 contract assertions + middleware fail-closed assertions)');
+  console.log('SHARED_ADAPTIVE_SECURITY_STORE_CHECK=PASS (26 contract assertions + middleware fail-closed assertions)');
 
   if (process.env.FV_TEST_REDIS === '1') {
     const port = process.env.REDIS_PORT || '6389';

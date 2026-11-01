@@ -72,3 +72,8 @@ Redis becomes a critical dependency. Monitor latency, capacity, failover and ava
 
 The shared middleware deliberately does **not** record authentication outcomes from an asynchronous response `finish` hook. Such a write can fail after the response has already been sent, silently losing the risk signal. The owner-authentication route must call and await `recordOwnerAuthentication(clientIp, false)` before returning a failed-auth response, and await/catch Redis errors as a fail-closed 503. Obtain the IP from Express `req.ip` only after the exact trusted-proxy chain is configured. Do not pass raw client-supplied `X-Forwarded-For`.
  
+
+
+### Memory-pressure trade-off
+
+The `noeviction` recommendation is deliberate: silently evicting a live quarantine/rate-limit key can weaken enforcement. It is not a zero-risk setting. When Redis reaches `maxmemory`, `noeviction` causes writes to return errors; Redis Lua scripts can abort at a memory-growing write while over the limit. Reserve operational headroom, alert before the limit, and test the managed Redis provider's behaviour. The adapter returns 503 on such errors rather than failing open. If the service cannot maintain adequate headroom, move coarse abuse controls to the CDN/WAF/edge and resize the shared store; do not switch to an eviction policy without explicitly accepting loss of active enforcement state.

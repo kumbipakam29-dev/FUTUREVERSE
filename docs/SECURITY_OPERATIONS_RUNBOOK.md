@@ -86,3 +86,8 @@ The current v23 candidate does not provide MFA/passkeys, a shared distributed se
 
 Failed owner-auth events must be recorded with an awaited `recordOwnerAuthentication()` call inside the auth route before returning the response. A best-effort `res.finish` callback is not sufficient because a Redis failure happens after the response can no longer be changed. Return generic 503 if the security store cannot persist the failure signal.
  
+
+
+### Memory-pressure trade-off
+
+The `noeviction` recommendation is deliberate: silently evicting a live quarantine/rate-limit key can weaken enforcement. It is not a zero-risk setting. When Redis reaches `maxmemory`, `noeviction` causes writes to return errors; Redis Lua scripts can abort at a memory-growing write while over the limit. Reserve operational headroom, alert before the limit, and test the managed Redis provider's behaviour. The adapter returns 503 on such errors rather than failing open. If the service cannot maintain adequate headroom, move coarse abuse controls to the CDN/WAF/edge and resize the shared store; do not switch to an eviction policy without explicitly accepting loss of active enforcement state.

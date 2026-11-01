@@ -87,3 +87,8 @@ The existing security review PR #2 remains draft/unmerged and main was not chang
 - Added regression coverage to ensure the shared middleware does not register a best-effort auth finish hook.
 - This route-level hook remains an integration requirement; the full Express app source is not present in the GitHub review overlay.
  
+
+
+## v24.4 — Redis memory-pressure caveat
+
+- Clarified the deliberate `noeviction` trade-off: preserve active security keys, reserve capacity headroom and alert early; Redis write errors surface as 503 rather than silent fallback. Redis documents Lua script abort behaviour under maxmemory pressure, so provider-specific failure behaviour must be tested.
