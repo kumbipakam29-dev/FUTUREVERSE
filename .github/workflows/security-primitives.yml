@@ -6,6 +6,7 @@ on:
     paths:
       - src/server/adaptiveSecurityService.ts
       - src/server/sharedAdaptiveSecurityStore.ts
+      - src/server/sharedHighRiskApprovalStore.ts
       - src/server/csrfOriginGuard.ts
       - test/**
       - docs/**
@@ -16,6 +17,7 @@ on:
     paths:
       - src/server/adaptiveSecurityService.ts
       - src/server/sharedAdaptiveSecurityStore.ts
+      - src/server/sharedHighRiskApprovalStore.ts
       - src/server/csrfOriginGuard.ts
       - test/**
       - docs/**
@@ -76,3 +78,9 @@ jobs:
           FV_TEST_REDIS: '1'
           REDIS_PORT: '6389'
         run: node test/shared_adaptive_security_store_check.mjs
+
+      - name: Test shared high-risk approvals across two store instances
+        env:
+          FV_TEST_REDIS: '1'
+          REDIS_PORT: '6389'
+        run: node test/shared_high_risk_approval_store_check.mjs
