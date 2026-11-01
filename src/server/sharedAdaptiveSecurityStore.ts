@@ -296,7 +296,7 @@ export class RedisAdaptiveSecurityStore {
         }
         if (isApi) {
           const decision = await this.evaluateRequest(address, pathname === '/api/health');
-          if (!ecision.allowed) {
+          if (!decision.allowed) {
             res.setHeader('Retry-After', String(Math.max(1, Math.ceil(decision.retryAfterMs / 1000))));
             res.status(429).json( {
               error: decision.reason === 'QUARANTINE' ? 'Request temporarily restricted by adaptive security controls.' : 'API request budget exceeded. Please retry later.',
