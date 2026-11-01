@@ -84,7 +84,7 @@ try {
 
   const broken = new RedisHighRiskApprovalStore({ ...options, redis: { eval: async () => { throw new Error('redis unavailable'); } } });
   await assert.rejects(() => broken.issueApproval(authority, 'publish.post', args), /redis unavailable/, 'store outages must propagate and must not fall back to local memory');
-  console.log('SHARED_HIGH_RISK_APPROVAL_STORE_CHECK=PASS (18 contract assertions)');
+  console.log('SHARED_HIGH_RISK_APPROVAL_STORE_CHECK=PASS (contract checks)');
 
   if (process.env.FV_TEST_REDIS === '1') {
     const port = process.env.REDIS_PORT || '6389';
