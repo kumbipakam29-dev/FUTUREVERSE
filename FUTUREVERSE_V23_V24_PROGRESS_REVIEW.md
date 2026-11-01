@@ -5,7 +5,7 @@
 - `npm run security:check`: PASS. Includes release integrity/privacy, owner auth, private authority file modes, SSRF/DNS-rebinding, CSRF Origin, adaptive layers/flood limits, compute route, public asset privacy, AI provider/routing, scheduler, backup integrity, production gates, Reverse Engineering Lab and Human Protection approval tests.
 - `npm test`: PASS — 82/82 in an isolated copy. The environment lacked the project-local `tsx` binary; a temporary Node 22 TypeScript loader shim was used. The shim is not part of the project.
 - TypeScript/TSX syntax transpilation: 118 files checked, 0 syntax diagnostics.
-- Source ZIP: 195 entries; 11,145,433 bytes; SHA-256 `990ff0bea543681e4238a5b2b0d76899e6b53a66378e667b439d51363a83de8c`.
+- Source ZIP: generated from the current candidate; exact size and SHA-256 are recorded in `release_checksums.json` and verified by the release gate.
 - ZIP integrity, private runtime-state exclusion and campaign registration redaction: PASS.
 
 ## Security phase status
