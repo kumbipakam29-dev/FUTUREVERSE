@@ -29,7 +29,6 @@ try {
 
   const authority = { ownerSessionVerified: true, permissions: ['APPROVE_HIGH_RISK_ACTIONS'], actorId: 'owner-verified-01' };
   const args = { destination: 'approved-channel', content: 'Reviewed announcement', options: { visibility: 'public', pinned: false } };
-  let tokenCounter = 0;
   const records = new Map();
   const calls = [];
   const fakeRedis = {
@@ -51,7 +50,7 @@ try {
       throw new Error('unknown approval script');
     },
   };
-  const options = { redis: fakeRedis, namespace: 'fv:approval:test', tokenFactory: () => 'A'.repeat(42) + String(++tokenCounter) };
+  const options = { redis: fakeRedis, namespace: 'fv:approval:test' };
   const replicaA = new RedisHighRiskApprovalStore(options);
   const replicaB = new RedisHighRiskApprovalStore(options);
 
