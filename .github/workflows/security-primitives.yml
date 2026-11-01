@@ -1,0 +1,86 @@
+name: Security primitives
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - src/server/adaptiveSecurityService.ts
+      - src/server/sharedAdaptiveSecurityStore.ts
+      - src/server/sharedHighRiskApprovalStore.ts
+      - src/server/csrfOriginGuard.ts
+      - test/**
+      - docs/**
+      - .github/workflows/security-primitives.yml
+  push:
+    branches:
+      - security/**
+    paths:
+      - src/server/adaptiveSecurityService.ts
+      - src/server/sharedAdaptiveSecurityStore.ts
+      - src/server/sharedHighRiskApprovalStore.ts
+      - src/server/csrfOriginGuard.ts
+      - test/**
+      - docs/**
+      - .github/workflows/security-primitives.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-primitives-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-primitives:
+    name: security-primitives
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Install isolated TypeScript test transpiler
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/fv-security-tools" --no-save --no-package-lock --ignore-scripts --no-audit --no-fund typescript@5.9.3
+          mkdir -p node_modules
+          ln -s "$RUNNER_TEMP/fv-security-tools/node_modules/typescript" node_modules/typescript
+          node -p "require('./node_modules/typescript/package.json').version"
+
+      - name: Check workflow security policy
+        run: node test/security_workflow_policy_check.mjs
+
+      - name: Test adaptive defense layers
+        run: node test/adaptive_security_layer_check.mjs
+
+      - name: Test owner-cookie CSRF origin guard
+        run: node test/csrf_origin_guard_check.mjs
+
+      - name: Install isolated Redis server for Lua integration
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y redis-server redis-tools
+          redis-server --port 6389 --bind 127.0.0.1 --save "" --appendonly no --daemonize yes
+          redis-cli -h 127.0.0.1 -p 6389 PING
+
+      - name: Test shared adaptive state across two store instances
+        env:
+          FV_TEST_REDIS: '1'
+          REDIS_PORT: '6389'
+        run: node test/shared_adaptive_security_store_check.mjs
+
+      - name: Test shared high-risk approvals across two store instances
+        env:
+          FV_TEST_REDIS: '1'
+          REDIS_PORT: '6389'
+        run: node test/shared_high_risk_approval_store_check.mjs
