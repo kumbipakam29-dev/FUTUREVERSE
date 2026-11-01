@@ -50,3 +50,8 @@ Thresholds are immutable at runtime. Client input and AI agents cannot weaken th
 - Independent penetration test with remediation evidence.
 
 No system is honestly non-hackable. The target is prevent, detect, contain, recover and continuously verify.
+
+
+## v24 quarantine recovery layer
+
+After the 15-minute QUARANTINE expires, a source enters a five-minute RECOVERY probation at 60 API requests/minute. Stale trigger counters are cleared at that transition to prevent immediate re-quarantine from old events. New signals continue to escalate normally. A clean recovery period returns the source to BASELINE. Regression test: `test/adaptive_quarantine_recovery_check.mjs`.

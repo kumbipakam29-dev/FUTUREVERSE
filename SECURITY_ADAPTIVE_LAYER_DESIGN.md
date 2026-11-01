@@ -34,3 +34,15 @@ Policy is immutable at runtime. Client-supplied data and AI agents cannot weaken
 - Verify proxy/HSTS behaviour and browser CSP separately. Full build, semantic typecheck, live HTTP/browser CSRF integration, proxy integration, multi-process tests, load tests, dependency audit, and external security review are still required.
 
 No system should be marketed as impossible to hack. The goal is layered prevention, detection, containment, recovery, and evidence.
+
+
+## v24 quarantine recovery cycle
+
+A completed 15-minute quarantine now transitions the source to a five-minute `RECOVERY` probation window instead of immediately falling back to BASELINE. At the transition, only the stale risk counters that triggered the previous quarantine are cleared; new signals during recovery continue to escalate normally.
+
+| Post-quarantine state | API budget | Behaviour |
+|---|---:|---|
+| RECOVERY | 60/minute/source for 5 minutes | Reduced traffic allowance; fresh suspicious signals can move the source back to GUARDED, CONTAINMENT, or QUARANTINE |
+| BASELINE | 180/minute/source | Reached after a clean recovery window |
+
+This avoids a stale-counter loop in which a source could be quarantined again immediately after its timer expired. It does not create an allowlist or bypass, and a new attack during recovery can re-escalate the source.
