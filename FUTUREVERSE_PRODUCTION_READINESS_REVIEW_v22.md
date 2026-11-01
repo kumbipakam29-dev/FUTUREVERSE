@@ -4,9 +4,9 @@
 
 ## Scope reviewed
 
-The v22 source candidate was created from the v20 public-safe source candidate and the subsequent local changes described below. This is a source-level review and patch record, not a deployment audit.
+Reviewed the v20 public-safe source package and its v20 review notes, then applied the v22 changes below. This is a source-level review and regression pass, not a deployment audit.
 
-## Changes recorded in v22
+## Changes made in v22
 
 - Removed the simulated transaction hash and success message from the YAGYX membership checkout UI. The UI now clearly reports that checkout is paused, removes the unverified recipient address, and warns users not to transfer funds.
 - Labeled the India ₹100/month and global $1/month values as planned membership targets, not active payment offers.
@@ -16,25 +16,28 @@ The v22 source candidate was created from the v20 public-safe source candidate a
 - Added `test/backup_checksum_verification_check.mjs` to `npm run security:check` and expanded production-readiness regression assertions.
 - Updated the release generator to omit the superseded v20 readiness report from the new public source archive.
 
-## Verification recorded
+## Verification performed in a clean extraction
 
-- `npm run security:check`: **PASS**.
-- Production-readiness regression gate: **30 assertions passed**.
-- Backup checksum regression gate: **14 assertions passed**.
-- AI task-routing runtime tests: **22 assertions passed**.
-- AI request scheduler tests: **13 assertions passed**.
-- TypeScript/TSX syntax transpilation: **59 files parsed with zero syntax diagnostics** using the globally available TypeScript transpiler. This is not a semantic type-check.
-- Project JSON seed/config parse check: **PASS**.
-- Generated sanitized source archive: ZIP integrity and privacy checks **PASS**.
+- `npm run security:check`: **PASS**. The clean extraction was given access to the globally installed TypeScript module through a temporary local symlink; no repository dependency files were changed by that setup. The command completed all included security gates.
+- Release archive generation/integrity/privacy: **PASS** (182 entries; SHA-256 recorded in the companion manifest).
+- Security release checks: **PASS**; static route/credential assertions and archive privacy checks passed.
+- Owner authorization smoke checks: **PASS** (name-only/spoof/unknown-identity rejection, separate owner credentials, role/session checks, nonce/session binding, replay rejection, and secret-strength checks).
+- Compute route hardening checks: **PASS** (rate limits, bounded fields, finite amount bounds, assignment-before-settlement, payload size, and demo-only settlement disclosure).
+- Public UI owner-name privacy scan: **PASS** (53 public assets scanned).
+- AI provider health and inference static checks: **PASS** (9 and 12 assertions respectively).
+- AI task-routing static checks: **PASS** (17 assertions); runtime tests: **PASS** (22 assertions).
+- AI request scheduler tests: **PASS** (13 assertions).
+- Backup checksum verification: **PASS** (14 assertions).
+- Production-readiness gates: **PASS** (30 assertions), including fail-closed payment/voting behavior and owner authorization for persona registration.
 
 ## Not verified / blockers
 
-- `npm run build` could not run because project dependencies were not installed (`vite: not found`).
-- `npm run lint` could not run because `vite/client` type definitions were unavailable.
-- `npm test` could not run because the `tsx` runner was unavailable (`spawnSync tsx ENOENT`).
+- `npm test`: **INCOMPLETE**. The isolated runner completed release archive generation, release-security checks, owner-authorization smoke checks, and compute-route hardening checks, then stopped because the `tsx` executable required for `test/run_tests.ts` is not installed (`spawnSync tsx ENOENT`).
+- `npm run build`: **BLOCKED** because Vite is not installed (`vite: not found`).
+- `npm run lint`: **BLOCKED** because the `vite/client` type definitions are unavailable (`TS2688`). A syntax-only transpilation is not a substitute for this semantic type-check.
 - No HTTP-level end-to-end test against a running deployment was performed.
 - No live YAGYX RPC, deployed token-contract, recipient-wallet ownership, account-binding, real wallet transaction, or real payment settlement was verified.
-- No live Ollama/local model or Gemini provider inference was performed in this review.
+- No live Ollama/local model or Gemini provider inference was performed in this review; the AI routing runtime tests use controlled test cases and do not establish provider availability.
 - No production deployment, multi-replica load test, infrastructure hardening review, or dependency vulnerability audit was performed.
 
 ## Required release controls
@@ -42,14 +45,6 @@ The v22 source candidate was created from the v20 public-safe source candidate a
 - Keep membership checkout disabled and do not accept real funds until trusted RPC, actual deployed token contracts, recipient control, and user/account binding are independently verified.
 - Keep feedback voting disabled until authenticated voter identity and server-side deduplication are implemented.
 - Keep new persona records in `TESTING` until a real evaluation has completed.
-- Complete a dependency install, production build, semantic type-check, full test suite, HTTP integration tests, real provider tests, blockchain/payment verification, deployment review, and load tests before production release.
+- Complete dependency installation, production build, semantic type-check, full test suite, HTTP integration tests, live provider tests, blockchain/payment verification, deployment review, dependency audit, and load tests before production release.
 
-## Artifact identity
-
-The locally generated v22 archive has SHA-256:
-
-`77e9ca94cf5fbeea6ba030aad7559e90efac7032bbc6c8e2e50f11da19d2c22f`
-
-File size: **11,103,420 bytes**.
-
-The ZIP archive itself is **not included in this pull request**; this PR contains the review and checksum record only. The archive remains a separate local artifact pending a binary upload path.
+**GitHub status:** A draft review PR records this report and the archive checksum. The v22 ZIP itself is not attached to the PR and is available separately as a locally verified artifact.
