@@ -56,6 +56,12 @@ try {
   probeShield.recordProbe('192.0.2.44', '/.git/config');
   assert.equal(probeShield.getLayerForAddress('192.0.2.44'), 'GUARDED');
 
+  const methodShield = new AdaptiveSecurityService();
+  methodShield.recordMethodBlocked('192.0.2.45', '/api/*');
+  methodShield.recordMethodBlocked('192.0.2.45', '/api/*');
+  assert.equal(methodShield.getLayerForAddress('192.0.2.45'), 'GUARDED', 'repeated dangerous HTTP methods must escalate the source');
+  assert.ok(methodShield.getPosture().recentEvents.every((event) => event.type === 'METHOD_BLOCKED'), 'method probes should retain their event classification');
+
   const middlewareShield = new AdaptiveSecurityService();
   const response = {
     headers: {}, statusCode: 200, body: undefined,
@@ -71,6 +77,22 @@ try {
   assert.equal(response.headers['X-Content-Type-Options'], 'nosniff');
   assert.equal(response.headers['X-Frame-Options'], 'DENY');
   assert.equal(response.headers['Referrer-Policy'], 'no-referrer');
+
+  const healthShield = new AdaptiveSecurityService();
+  const healthResponse = {
+    headers: {}, statusCode: 200,
+    setHeader(name, value) { this.headers[name] = value; return this; },
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+    once() { return this; },
+  };
+  const healthMiddleware = healthShield.middleware();
+  for (let i = 0; i < 1_000; i++) {
+    healthMiddleware({ ip: '203.0.113.77', socket: { remoteAddress: '203.0.113.77' }, path: '/api/health', method: 'GET', secure: false }, healthResponse, () => {});
+  }
+  const healthState = [...healthShield.clients.values()][0];
+  assert.equal(healthState.apiRequests.length, 0, 'public health checks must not consume the normal API budget');
+  assert.equal(healthShield.getLayerForAddress('203.0.113.77'), 'BASELINE');
 
   // Flood-style regression: per-client rolling timestamp arrays must remain bounded.
   const floodShield = new AdaptiveSecurityService();

@@ -156,9 +156,20 @@ export class AdaptiveSecurityService {
 
   public recordProbe(address: string, route: string): SecurityLayer {
     const { key, state } = this.stateFor(address);
-    pushRecentBounded(state.probes, Date.now(), 8);
-    const layer = this.layerForState(state, Date.now());
+    const now = Date.now();
+    pushRecentBounded(state.probes, now, 8);
+    const layer = this.layerForState(state, now);
     this.appendEvent(key, 'PROBE_PATH', layer, route);
+    return layer;
+  }
+
+  /** Dangerous method probes share the probe-risk counter and retain their own event type. */
+  public recordMethodBlocked(address: string, route: string): SecurityLayer {
+    const { key, state } = this.stateFor(address);
+    const now = Date.now();
+    pushRecentBounded(state.probes, now, 8);
+    const layer = this.layerForState(state, now);
+    this.appendEvent(key, 'METHOD_BLOCKED', layer, route);
     return layer;
   }
 
@@ -200,12 +211,11 @@ export class AdaptiveSecurityService {
       res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
       if (isApi) res.setHeader('Cache-Control', 'no-store');
       if (process.env.NODE_ENV === 'production' && req.secure) {
-        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000');
       }
 
       if (['TRACE', 'TRACK', 'CONNECT'].includes(req.method.toUpperCase())) {
-        const layer = this.getLayerForAddress(address);
-        this.appendEvent(key, 'METHOD_BLOCKED', layer, pathname);
+        this.recordMethodBlocked(address, pathname);
         return res.status(405).json({ error: 'HTTP method not allowed.' });
       }
 
@@ -214,7 +224,9 @@ export class AdaptiveSecurityService {
         return res.status(404).json({ error: 'Not found.' });
       }
 
-      if (isApi) {
+      // Keep health checks independent from client API budgets so monitoring cannot
+      // exhaust an otherwise legitimate user's request allowance.
+      if (isApi && pathname !== '/api/health') {
         pushRecentBounded(state.apiRequests, now, SECURITY_LAYER_POLICY.BASELINE.maxApiRequestsPerMinute + 1);
         keepRecent(state.apiRequests, now, WINDOW_MS);
         const layer = this.layerForState(state, now);

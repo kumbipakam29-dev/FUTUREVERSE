@@ -20,7 +20,7 @@ Policy is immutable at runtime. Client-supplied data and AI agents cannot weaken
 1. Baseline headers: nosniff, frame denial, referrer policy, permissions policy, same-origin opener policy, and production HSTS only for HTTPS requests.
 2. Request boundary: strict JSON parsing with a 1 MiB limit, dangerous HTTP method rejection, and generic 404 for common probe paths.
 3. Adaptive source-specific request limits: BASELINE → GUARDED → CONTAINMENT → QUARANTINE.
-4. Existing controls remain: 5 owner-auth attempts per 15 minutes, active owner sessions for protected routes, payment and export fail-closed guards.
+4. Existing controls remain: 5 owner-auth attempts per 15 minutes, active owner sessions for protected routes, payment and export fail-closed guards. Failed protected-route authorization also feeds the adaptive source risk counter.
 5. Owner-only observability: `GET /api/security/posture` returns aggregate layer counts and recent privacy-filtered events.
 
 ## Safety and limits
@@ -29,7 +29,7 @@ Policy is immutable at runtime. Client-supplied data and AI agents cannot weaken
 - Event records omit raw IPs, request bodies, credentials, cookies, query strings, and resource IDs. Client fingerprints use a process-ephemeral HMAC salt.
 - State and event buffers are bounded. Per-client rolling timestamp arrays are capped at saturation thresholds (181 API samples, 10 auth failures, 8 probes, 8 rate-limit events), preventing request floods from growing timestamp storage without bound.
 - No autonomous code, route, secret, owner-record, or policy mutation is allowed.
-- State is process-local and resets on restart. Multi-replica deployment needs shared atomic rate-limit storage and consistent trusted proxy configuration.
+- The `/api/health` monitoring route is excluded from the normal per-client API budget so monitoring cannot exhaust user quotas. Repeated TRACE/TRACK/CONNECT attempts count as source probe signals. State is process-local and resets on restart. Multi-replica deployment needs shared atomic rate-limit storage and consistent trusted proxy configuration.
 - This app-level layer does not replace a WAF/CDN, DDoS controls, host/container isolation, MFA/passkeys, database authorization, external immutable logs, backups, patching, dependency scanning, or independent penetration testing.
 - Verify proxy/HSTS behaviour and browser CSP separately. Full build, semantic typecheck, HTTP integration behind the real proxy, multi-process tests, load tests, dependency audit, and external security review are still required.
 
