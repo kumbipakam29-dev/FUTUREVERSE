@@ -123,7 +123,7 @@ try {
   assert.equal(allowedRequest.nextCalled, true, 'allowed request must reach the application');
   assert.equal(allowedRequest.response.headers['Cache-Control'], 'no-store');
   middlewareRedis.mode = 'quarantine';
-  const blockedRequest = await runMiddleware({ ip: '198.51.00.32', socket: { remoteAddress: '198.51.100.32' }, path: '/api/test', method: 'GET', secure: false });
+  const blockedRequest = await runMiddleware({ ip: '198.51.100.32', socket: { remoteAddress: '198.51.100.32' }, path: '/api/test', method: 'GET', secure: false });
   assert.equal(blockedRequest.nextCalled, false, 'quarantined request must not reach the application');
   assert.equal(blockedRequest.response.statusCode, 429);
   assert.equal(blockedRequest.response.body.code, 'SECURITY_QUARANTINE');
