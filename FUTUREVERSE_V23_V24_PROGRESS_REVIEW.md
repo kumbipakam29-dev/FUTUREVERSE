@@ -52,3 +52,13 @@ The existing security review PR #2 remains draft/unmerged and main was not chang
 5. Add creative provider adapters only after credentials, quotas, licensing and real render tests are configured.
 6. Add live YAGYX RPC/chain verification and operator-run infrastructure checks.
 7. Add shared rate-limit/approval storage, MFA/passkeys, CI, dependency/SBOM scan and independent security review before deployment.
+
+## v24 — Shared adaptive-state candidate (2026-11-01)
+
+- Added an ioredis-compatible `RedisAdaptiveSecurityStore` with one atomic Lua EVAL for sliding-window API budgets, auth-failure/probe/rate counters and 15-minute quarantine.
+- All per-source keys share a Redis Cluster hash tag; Redis TIME is authoritative across replicas; source identifiers use a stable HMAC secret (32+ bytes) shared privately by all replicas.
+- Added async middleware that returns 503 on Redis failure and never silently falls back to local counters.
+- Successful login no longer clears failure signals from other users sharing the same public IP/NAT; signals age out naturally.
+- Added contract tests and a real Redis CLI/Lua integration test in GitHub Actions, covering cross-instance escalation, quarantine persistence, health availability, client isolation and shared rate budgets.
+- **Not yet production-active:** this source-only PR overlay does not contain the complete app server. The host must wire the adapter, provision Redis/TLS/ACL and a stable private fingerprint secret, validate trusted proxy settings, and complete production load/failover review before replacing in-memory middleware.
+- Global posture dashboard aggregation, alert delivery, multi-region failover, full app build/typecheck and independent penetration testing remain outstanding.

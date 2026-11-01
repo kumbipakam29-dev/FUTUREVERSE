@@ -5,16 +5,20 @@ on:
     branches: [main]
     paths:
       - src/server/adaptiveSecurityService.ts
+      - src/server/sharedAdaptiveSecurityStore.ts
       - src/server/csrfOriginGuard.ts
       - test/**
+      - docs/**
       - .github/workflows/security-primitives.yml
   push:
     branches:
       - security/**
     paths:
       - src/server/adaptiveSecurityService.ts
+      - src/server/sharedAdaptiveSecurityStore.ts
       - src/server/csrfOriginGuard.ts
       - test/**
+      - docs/**
       - .github/workflows/security-primitives.yml
 
 permissions:
@@ -28,7 +32,7 @@ jobs:
   security-primitives:
     name: security-primitives
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -59,3 +63,16 @@ jobs:
 
       - name: Test owner-cookie CSRF origin guard
         run: node test/csrf_origin_guard_check.mjs
+
+      - name: Install isolated Redis server for Lua integration
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y redis-server redis-tools
+          redis-server --port 6389 --bind 127.0.0.1 --save "" --appendonly no --daemonize yes
+          redis-cli -h 127.0.0.1 -p 6389 PING
+
+      - name: Test shared adaptive state across two store instances
+        env:
+          FV_TEST_REDIS: '1'
+          REDIS_PORT: '6389'
+        run: node test/shared_adaptive_security_store_check.mjs

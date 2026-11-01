@@ -24,3 +24,12 @@ The v23 source candidate integrates the adaptive service and CSRF guard into the
 - Download nonces do not appear in browser URLs.
 
 Adaptive client state is process-local. Multi-replica production requires a shared atomic store or trusted managed edge rate-limiting with verified proxy semantics. App middleware is not a WAF, DDoS service, or guarantee of being unhackable.
+
+## v24 shared Redis mode (candidate; not yet active)
+
+- New adapter: `src/server/sharedAdaptiveSecurityStore.ts`.
+- Requires one private 32+ byte `ADAPTIVE_SECURITY_FINGERPRINT_SECRET` shared across replicas and an ioredis-compatible Redis client.
+- Redis Lua EVAL performs request admission and risk updates atomically using Redis server time and one Redis Cluster hash slot.
+- Use `store.middleware()` instead of the process-local adaptive middleware; do not install both.
+- Redis failures return 503. Never fall back to local memory in shared mode.
+- Full source server integration, production Redis configuration, TLS/ACL, trusted proxy verification, failover/load tests and independent review remain mandatory.

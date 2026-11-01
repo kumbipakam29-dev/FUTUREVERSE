@@ -34,3 +34,9 @@ Policy is immutable at runtime. Client-supplied data and AI agents cannot weaken
 - Verify proxy/HSTS behaviour and browser CSP separately. Full build, semantic typecheck, live HTTP/browser CSRF integration, proxy integration, multi-process tests, load tests, dependency audit, and external security review are still required.
 
 No system should be marketed as impossible to hack. The goal is layered prevention, detection, containment, recovery, and evidence.
+
+## v24 shared-state candidate
+
+A separate `RedisAdaptiveSecurityStore` adapter defines a multi-replica path using one atomic Lua EVAL. It uses Redis TIME, stable per-source HMAC identifiers from a 32+ byte private secret, and six keys with one Redis Cluster hash tag. The async middleware fails closed with 503 when Redis is unavailable; it never falls back to per-process memory. This adapter is not wired into the complete application server yet. See `docs/SHARED_ADAPTIVE_SECURITY_STORE.md` for provisioning, integration and tests.
+
+A successful login does not clear failed-auth signals from the same IP because multiple legitimate users may share a NAT. Signals expire naturally after the fixed window. NAT collateral risk remains; production should combine source limits with authenticated account/session and edge controls, without attacker-triggerable account lockout.
