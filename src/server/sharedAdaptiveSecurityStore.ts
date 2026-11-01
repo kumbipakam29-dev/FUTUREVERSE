@@ -72,20 +72,24 @@ prune(authKey, 900000)
 prune(probesKey, 60000)
 prune(rateKey, 300000)
 
-local function addSignal(key, window)
-  redis.call('ZADD', key, now, member)
+local function addBoundedSignal(key, window, maxEntries)
+  -- The only information required after saturation is "threshold reached".
+  -- Capping ZSET members prevents a distributed flood from turning counters into unbounded memory.
+  if redis.call('ZCARD', key) < maxEntries then
+    redis.call('ZADD', key, now, member)
+  end
   redis.call('PEXPIRE', key, math.max(window * 2, 60000))
 end
 
 if action == 'REQUEST' then
-  if not isHealth then addSignal(requestsKey, 60000) end
+  if not isHealth then addBoundedSignal(requestsKey, 60000, 181) end
 elseif action == 'AUTH_FAILURE' then
-  addSignal(authKey, 900000)
+  addBoundedSignal(authKey, 900000, 10)
 elseif action == 'AUTH_SUCCESS' then
   -- A successful login must not erase failures recorded by other users behind the same NAT/IP.
   -- Failed-auth signals age out naturally through the 15-minute sliding window.
 elseif action == 'PROBE' or action == 'METHOD_BLOCKED' then
-  addSignal(probesKey, 60000)
+  addBoundedSignal(probesKey, 60000, 8)
 end
 
 local requestCount = redis.call('ZCARD', requestsKey)
@@ -122,7 +126,7 @@ if action == 'REQUEST' and not isHealth then
     if layer == 'GUARDED' then limit = 90 end
     if layer == 'CONTAINMENT' then limit = 30 end
     if requestCount > limit then
-      addSignal(rateKey, 300000)
+      addBoundedSignal(rateKey, 300000, 8)
       rateCount = redis.call('ZCARD', rateKey)
       layer = resolveLayer()
       allowed = 0

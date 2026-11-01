@@ -72,6 +72,7 @@ try {
   assert.match(firstCall.script, /redis\.call\('TIME'\)/, 'Redis server time must be authoritative across replicas');
   assert.match(firstCall.script, /ZREMRANGEBYSCORE/);
   assert.match(firstCall.script, /ZADD/);
+  assert.match(firstCall.script, /ZCARD', key\) < maxEntries/, 'per-client counter ZSETs must stop growing after their risk threshold is saturated');
   assert.match(firstCall.script, /redis\.call\('SET', quarantineKey[\s\S]*'PX', 900000\)/);
   assert.match(firstCall.script, /redis\.call\('LTRIM', eventsKey, 0, 249\)/);
 
@@ -183,7 +184,22 @@ try {
     assert.equal(lastDecision.layer, 'BASELINE');
     assert.equal(lastDecision.allowed, false, 'request budget must be shared atomically between replicas');
     assert.equal(lastDecision.reason, 'RATE_LIMIT');
-    console.log('REAL_REDIS_LUA_INTEGRATION=PASS (12 assertions across two independent store instances)');
+    const boundedIp = '198.51.100.23';
+    for (let i = 0; i < 400; i++) await serverOne.evaluateRequest(boundedIp);
+    const boundedFingerprint = createSharedClientFingerprint(boundedIp, sharedOptions.fingerprintSecret);
+    const boundedRoot = `fv:test:${process.pid}:{${boundedFingerprint}}`;
+    assert.equal(Number(redisCli('ZCARD', boundedRoot + ':requests')), 181, 'request counter must saturate at baseline threshold + 1 even during continued quarantine traffic');
+    assert.ok(Number(redisCli('ZCARD', boundedRoot + ':rate')) <= 8, 'rate-limit signal storage must be capped at the quarantine threshold');
+    assert.ok(Number(redisCli('LLEN', boundedRoot + ':events')) <= 250, 'per-client event list must remain bounded');
+    const boundedAuthIp = '198.51.100.24';
+    for (let i = 0; i < 30; i++) await serverOne.recordOwnerAuthentication(boundedAuthIp, false);
+    const boundedAuthFp = createSharedClientFingerprint(boundedAuthIp, sharedOptions.fingerprintSecret);
+    assert.equal(Number(redisCli('ZCARD', `fv:test:${process.pid}:{${boundedAuthFp}}:auth`)), 10, 'auth failure storage must saturate at quarantine threshold');
+    const boundedProbeIp = '198.51.100.25';
+    for (let i = 0; i < 30; i++) await serverOne.recordProbe(boundedProbeIp);
+    const boundedProbeFp = createSharedClientFingerprint(boundedProbeIp, sharedOptions.fingerprintSecret);
+    assert.equal(Number(redisCli('ZCARD', `fv:test:${process.pid}:{${boundedProbeFp}}:probes`)), 8, 'probe storage must saturate at quarantine threshold');
+    console.log('REAL_REDIS_LUA_INTEGRATION=PASS (18 assertions across two independent store instances + bounded flood counters)');
   } else {
     console.log('REAL_REDIS_LUA_INTEGRATION=SKIPPED (set FV_TEST_REDIS=1 with an isolated Redis server)');
   }

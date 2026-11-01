@@ -62,3 +62,12 @@ The existing security review PR #2 remains draft/unmerged and main was not chang
 - Added contract tests and a real Redis CLI/Lua integration test in GitHub Actions, covering cross-instance escalation, quarantine persistence, health availability, client isolation and shared rate budgets.
 - **Not yet production-active:** this source-only PR overlay does not contain the complete app server. The host must wire the adapter, provision Redis/TLS/ACL and a stable private fingerprint secret, validate trusted proxy settings, and complete production load/failover review before replacing in-memory middleware.
 - Global posture dashboard aggregation, alert delivery, multi-region failover, full app build/typecheck and independent penetration testing remain outstanding.
+
+
+## v24.1 — Bounded counters and consumption-time re-authorization
+
+- Redis sliding-window ZSETs now saturate at the amount needed to enforce each threshold (181 API samples, 10 auth failures, 8 probes, 8 rate-limit signals). Further floods cannot keep growing these per-source counters.
+- Added real Redis assertions for bounded request/auth/probe/rate counters and capped event lists.
+- High-risk approval consumption now requires a currently verified owner session and `APPROVE_HIGH_RISK_ACTIONS`, not merely an actor ID passed to the storage method.
+- Canonical approval arguments now reject getters/accessors, sparse arrays, cycles, non-JSON values, excessive nesting and excessive node counts before hashing.
+- Full server wiring and deployment remain unverified; these are storage primitives on the review branch.

@@ -60,7 +60,18 @@ try {
   assert.throws(() => hashHighRiskArguments({ value: Number.NaN }), /NUMBER_INVALID/);
   const cyclic = {}; cyclic.self = cyclic;
   assert.throws(() => hashHighRiskArguments(cyclic), /CYCLE_DETECTED/);
+  const sparse = new Array(2);
+  assert.throws(() => hashHighRiskArguments(sparse), /ARRAY_SHAPE_INVALID|ARRAY_HOLE/);
+  const getterArgs = {};
+  Object.defineProperty(getterArgs, 'secret', { enumerable: true, get() { throw new Error('getter should never run'); } });
+  assert.throws(() => hashHighRiskArguments(getterArgs), /ACCESSOR_PROPERTY/);
+  let deeplyNested = {};
+  let deepCursor = deeplyNested;
+  for (let i = 0; i < 40; i++) { deepCursor.next = {}; deepCursor = deepCursor.next; }
+  assert.throws(() => hashHighRiskArguments(deeplyNested), /DEPTH_LIMIT/);
 
+  await assert.rejects(() => replicaA.consumeApproval('A'.repeat(43), { ...authority, ownerSessionVerified: false }, 'publish.post', args), /VERIFIED_OWNER_SESSION_REQUIRED/);
+  await assert.rejects(() => replicaA.consumeApproval('A'.repeat(43), { ...authority, permissions: [] }, 'publish.post', args), /PERMISSION_REQUIRED/);
   const issued = await replicaA.issueApproval(authority, 'publish.post', args);
   assert.equal(issued.expiresInSeconds, 120);
   assert.match(issued.token, /^[A-Za-z0-9_-]{43}$/);
@@ -73,17 +84,17 @@ try {
   assert.match(calls[0].script, /'PX', ARGV\[2\]/, 'issue script must apply an expiry');
   assert.match(calls[1]?.script || HIGH_RISK_APPROVAL_CONSUME_LUA, /redis\.call\('DEL', KEYS\[1\]\)/, 'consume script must atomically delete on success');
 
-  assert.equal(await replicaB.consumeApproval(issued.token, 'other-owner', 'publish.post', args), 'BINDING_MISMATCH');
-  assert.equal(await replicaB.consumeApproval(issued.token, authority.actorId, 'publish.post', { ...args, content: 'Changed content' }), 'BINDING_MISMATCH');
-  assert.equal(await replicaB.consumeApproval(issued.token, authority.actorId, 'delete.account', args), 'BINDING_MISMATCH');
+  assert.equal(await replicaB.consumeApproval(issued.token, { ...authority, actorId: 'other-owner' }, 'publish.post', args), 'BINDING_MISMATCH');
+  assert.equal(await replicaB.consumeApproval(issued.token, authority, 'publish.post', { ...args, content: 'Changed content' }), 'BINDING_MISMATCH');
+  assert.equal(await replicaB.consumeApproval(issued.token, authority, 'delete.account', args), 'BINDING_MISMATCH');
   assert.equal(records.size, 1, 'binding mismatch must not consume the approval');
-  assert.equal(await replicaB.consumeApproval(issued.token, authority.actorId, 'publish.post', { options: { pinned: false, visibility: 'public' }, content: 'Reviewed announcement', destination: 'approved-channel' }), 'CONSUMED', 'different replicas and equivalent canonical argument ordering must consume the same approval');
+  assert.equal(await replicaB.consumeApproval(issued.token, authority, 'publish.post', { options: { pinned: false, visibility: 'public' }, content: 'Reviewed announcement', destination: 'approved-channel' }), 'CONSUMED', 'different replicas and equivalent canonical argument ordering must consume the same approval');
   assert.equal(records.size, 0);
-  assert.equal(await replicaA.consumeApproval(issued.token, authority.actorId, 'publish.post', args), 'NOT_FOUND_OR_EXPIRED', 'approval replay must fail');
+  assert.equal(await replicaA.consumeApproval(issued.token, authority, 'publish.post', args), 'NOT_FOUND_OR_EXPIRED', 'approval replay must fail');
 
   const broken = new RedisHighRiskApprovalStore({ ...options, redis: { eval: async () => { throw new Error('redis unavailable'); } } });
   await assert.rejects(() => broken.issueApproval(authority, 'publish.post', args), /redis unavailable/, 'store outages must propagate and must not fall back to local memory');
-  console.log('SHARED_HIGH_RISK_APPROVAL_STORE_CHECK=PASS (contract checks)');
+  console.log('SHARED_HIGH_RISK_APPROVAL_STORE_CHECK=PASS (owner re-verification, safe canonicalization and contract checks)');
 
   if (process.env.FV_TEST_REDIS === '1') {
     const port = process.env.REDIS_PORT || '6389';
@@ -101,17 +112,17 @@ try {
     const realArgs = { operation: 'publish', target: 'verified-test-target', payload: { text: 'human-approved' } };
     const realAuthority = { ownerSessionVerified: true, permissions: ['APPROVE_HIGH_RISK_ACTIONS'], actorId: 'real-owner-42' };
     const realApproval = await serverOne.issueApproval(realAuthority, 'content.publish', realArgs);
-    assert.equal(await serverTwo.consumeApproval(realApproval.token, 'other-owner', 'content.publish', realArgs), 'BINDING_MISMATCH');
-    assert.equal(await serverTwo.consumeApproval(realApproval.token, realAuthority.actorId, 'content.publish', { ...realArgs, payload: { text: 'tampered' } }), 'BINDING_MISMATCH');
-    assert.equal(await serverTwo.consumeApproval(realApproval.token, realAuthority.actorId, 'content.publish', realArgs), 'CONSUMED', 'approval should be consumed across Redis-backed store instances');
-    assert.equal(await serverOne.consumeApproval(realApproval.token, realAuthority.actorId, 'content.publish', realArgs), 'NOT_FOUND_OR_EXPIRED', 'single-use token must reject replay across instances');
+    assert.equal(await serverTwo.consumeApproval(realApproval.token, { ...realAuthority, actorId: 'other-owner' }, 'content.publish', realArgs), 'BINDING_MISMATCH');
+    assert.equal(await serverTwo.consumeApproval(realApproval.token, realAuthority, 'content.publish', { ...realArgs, payload: { text: 'tampered' } }), 'BINDING_MISMATCH');
+    assert.equal(await serverTwo.consumeApproval(realApproval.token, realAuthority, 'content.publish', realArgs), 'CONSUMED', 'approval should be consumed across Redis-backed store instances');
+    assert.equal(await serverOne.consumeApproval(realApproval.token, realAuthority, 'content.publish', realArgs), 'NOT_FOUND_OR_EXPIRED', 'single-use token must reject replay across instances');
     const expiring = await serverOne.issueApproval(realAuthority, 'content.publish', realArgs);
     const digest = (await import('node:crypto')).createHash('sha256').update(expiring.token).digest('hex');
     const redisKey = namespace + ':' + digest;
     const ttl = Number(redisCli('PTTL', redisKey));
     assert.ok(ttl > 0 && ttl <= 120_000, 'Redis must enforce a maximum 120-second approval lifetime');
     redisCli('DEL', redisKey);
-    assert.equal(await serverTwo.consumeApproval(expiring.token, realAuthority.actorId, 'content.publish', realArgs), 'NOT_FOUND_OR_EXPIRED');
+    assert.equal(await serverTwo.consumeApproval(expiring.token, realAuthority, 'content.publish', realArgs), 'NOT_FOUND_OR_EXPIRED');
     console.log('REAL_REDIS_HIGH_RISK_APPROVAL_INTEGRATION=PASS (7 assertions across two store instances)');
   } else {
     console.log('REAL_REDIS_HIGH_RISK_APPROVAL_INTEGRATION=SKIPPED (set FV_TEST_REDIS=1 with an isolated Redis server)');

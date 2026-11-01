@@ -49,32 +49,71 @@ export const HIGH_RISK_APPROVAL_CONSUME_LUA = [
   'return 1',
 ].join('\n');
 
-function canonicalJson(value: unknown, seen = new Set<object>()): string {
+const MAX_ARGUMENT_DEPTH = 32;
+const MAX_ARGUMENT_NODES = 10_000;
+
+function canonicalJson(
+  value: unknown,
+  seen = new Set<object>(),
+  depth = 0,
+  budget: { nodes: number } = { nodes: 0 },
+): string {
+  budget.nodes++;
+  if (depth > MAX_ARGUMENT_DEPTH) throw new Error('APPROVAL_ARGUMENT_DEPTH_LIMIT');
+  if (budget.nodes > MAX_ARGUMENT_NODES) throw new Error('APPROVAL_ARGUMENT_NODE_LIMIT');
+
   if (value === null) return 'null';
-  if (typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
+  if (typeof value === 'string') {
+    if (Buffer.byteLength(value, 'utf8') > MAX_ARGUMENT_BYTES) throw new Error('APPROVAL_ARGUMENTS_TOO_LARGE');
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'boolean') return JSON.stringify(value);
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new Error('APPROVAL_ARGUMENT_NUMBER_INVALID');
     return JSON.stringify(value);
   }
+
   if (Array.isArray(value)) {
+    if (value.length > MAX_ARGUMENT_NODES) throw new Error('APPROVAL_ARGUMENT_NODE_LIMIT');
     if (seen.has(value)) throw new Error('APPROVAL_ARGUMENT_CYCLE_DETECTED');
+    const ownKeys = Reflect.ownKeys(value);
+    if (ownKeys.some((key) => typeof key === 'symbol')) throw new Error('APPROVAL_ARGUMENT_SYMBOL_KEY_INVALID');
+    if (ownKeys.length !== value.length + 1 || ownKeys.some((key) =>
+      key !== 'length' && (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= value.length)
+    )) throw new Error('APPROVAL_ARGUMENT_ARRAY_SHAPE_INVALID');
     seen.add(value);
-    const result = '[' + value.map((item) => canonicalJson(item, seen)).join(',') + ']';
+    const items: string[] = [];
+    for (let index = 0; index < value.length; index++) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor) throw new Error('APPROVAL_ARGUMENT_ARRAY_HOLE');
+      if (!('value' in descriptor)) throw new Error('APPROVAL_ARGUMENT_ACCESSOR_PROPERTY');
+      items.push(canonicalJson(descriptor.value, seen, depth + 1, budget));
+    }
     seen.delete(value);
-    return result;
+    return '[' + items.join(',') + ']';
   }
+
   if (typeof value === 'object') {
     const objectValue = value as Record<string, unknown>;
     const prototype = Object.getPrototypeOf(objectValue);
     if (prototype !== Object.prototype && prototype !== null) throw new Error('APPROVAL_ARGUMENT_OBJECT_TYPE_INVALID');
     if (seen.has(objectValue)) throw new Error('APPROVAL_ARGUMENT_CYCLE_DETECTED');
-    if (Object.getOwnPropertySymbols(objectValue).length > 0) throw new Error('APPROVAL_ARGUMENT_SYMBOL_KEY_INVALID');
-    seen.add(objectValue);
+    if (Reflect.ownKeys(objectValue).some((key) => typeof key === 'symbol')) throw new Error('APPROVAL_ARGUMENT_SYMBOL_KEY_INVALID');
     const keys = Object.keys(objectValue).sort();
-    const result = '{' + keys.map((key) => JSON.stringify(key) + ':' + canonicalJson(objectValue[key], seen)).join(',') + '}';
+    if (keys.length > MAX_ARGUMENT_NODES) throw new Error('APPROVAL_ARGUMENT_NODE_LIMIT');
+    seen.add(objectValue);
+    const entries: string[] = [];
+    for (const key of keys) {
+      if (Buffer.byteLength(key, 'utf8') > MAX_ARGUMENT_BYTES) throw new Error('APPROVAL_ARGUMENTS_TOO_LARGE');
+      const descriptor = Object.getOwnPropertyDescriptor(objectValue, key);
+      if (!descriptor || !descriptor.enumerable) throw new Error('APPROVAL_ARGUMENT_PROPERTY_INVALID');
+      if (!('value' in descriptor)) throw new Error('APPROVAL_ARGUMENT_ACCESSOR_PROPERTY');
+      entries.push(JSON.stringify(key) + ':' + canonicalJson(descriptor.value, seen, depth + 1, budget));
+    }
     seen.delete(objectValue);
-    return result;
+    return '{' + entries.join(',') + '}';
   }
+
   throw new Error('APPROVAL_ARGUMENT_TYPE_INVALID');
 }
 
@@ -88,6 +127,14 @@ function validateActorId(actorId: string): void {
   if (typeof actorId !== 'string' || !/^[a-zA-Z0-9_.:@-]{1,160}$/.test(actorId)) {
     throw new Error('APPROVAL_ACTOR_ID_INVALID');
   }
+}
+
+function validateVerifiedOwnerAuthority(authority: VerifiedOwnerApprovalContext): void {
+  if (!authority || authority.ownerSessionVerified !== true) throw new Error('APPROVAL_VERIFIED_OWNER_SESSION_REQUIRED');
+  if (!Array.isArray(authority.permissions) || !authority.permissions.includes(HIGH_RISK_APPROVAL_PERMISSION)) {
+    throw new Error('APPROVAL_PERMISSION_REQUIRED');
+  }
+  validateActorId(authority.actorId);
 }
 
 function validateToolName(toolName: string): void {
@@ -126,11 +173,7 @@ export class RedisHighRiskApprovalStore {
     toolName: string,
     args: unknown,
   ): Promise<IssuedHighRiskApproval> {
-    if (!authority || authority.ownerSessionVerified !== true) throw new Error('APPROVAL_VERIFIED_OWNER_SESSION_REQUIRED');
-    if (!Array.isArray(authority.permissions) || !authority.permissions.includes(HIGH_RISK_APPROVAL_PERMISSION)) {
-      throw new Error('APPROVAL_PERMISSION_REQUIRED');
-    }
-    validateActorId(authority.actorId);
+    validateVerifiedOwnerAuthority(authority);
     validateToolName(toolName);
     const argumentHash = hashHighRiskArguments(args);
     const token = crypto.randomBytes(32).toString('base64url');
@@ -148,11 +191,12 @@ export class RedisHighRiskApprovalStore {
    */
   public async consumeApproval(
     token: string,
-    actorId: string,
+    authority: VerifiedOwnerApprovalContext,
     toolName: string,
     args: unknown,
   ): Promise<HighRiskApprovalConsumption> {
-    validateActorId(actorId);
+    // Re-check the live owner session and permission at consumption, not only when the token is issued.
+    validateVerifiedOwnerAuthority(authority);
     validateToolName(toolName);
     const digest = tokenDigest(token);
     const argumentHash = hashHighRiskArguments(args);
@@ -160,7 +204,7 @@ export class RedisHighRiskApprovalStore {
       HIGH_RISK_APPROVAL_CONSUME_LUA,
       1,
       this.namespace + ':' + digest,
-      actorId,
+      authority.actorId,
       toolName,
       argumentHash,
     ));

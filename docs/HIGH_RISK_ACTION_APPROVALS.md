@@ -17,3 +17,8 @@ The store is not an authorization endpoint. The host application must create the
 
 ## Limits
 This does not implement MFA/passkeys or replace the existing tool approval guard. It is a multi-replica storage adapter. The complete app source and actual high-risk tool callsites are not in the GitHub repository source tree yet, so full runtime integration is outstanding. Production requires Redis TLS/ACL/private network, audit alerting, action-level authorization review and real HTTP tests.
+
+
+## Consumption-time authority check
+
+The shared approval store now requires a currently verified owner-session context with `APPROVE_HIGH_RISK_ACTIONS` both when issuing **and** consuming a token. The caller must derive that context from the active server-side session; never accept `ownerSessionVerified`, `actorId` or permissions from request JSON. The one-time token still binds actor, tool and canonical arguments, and is atomically deleted only after an exact match. Canonical JSON rejects accessor properties, sparse arrays, cycles, non-JSON objects, excessive depth and excessive node count before hashing.
