@@ -58,7 +58,7 @@ try {
   assert.throws(() => createSharedClientFingerprint('not-an-ip', secret), /IP_UNAVAILABLE/);
 
   const first = await replicaA.evaluateRequest('198.51.100.12');
-  const second = await repliceB.evaluateRequest('198.51.100.12');
+  const second = await replicaB.evaluateRequest('198.51.100.12');
   assert.equal(first.layer, 'BASELINE');
   assert.equal(first.allowed, true);
   assert.equal(second.layer, 'BASELINE');
