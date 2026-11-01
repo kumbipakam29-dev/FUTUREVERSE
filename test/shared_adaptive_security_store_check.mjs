@@ -119,7 +119,7 @@ try {
     await new Promise((resolve) => setImmediate(resolve));
     return { response, nextCalled };
   };
-  const allowedRequest = await runMiddleware({ ip: '198.51.100.31', socket: { remoteAddress: '198.51.00.31' }, path: '/api/test', method: 'GET', secure: false });
+  const allowedRequest = await runMiddleware({ ip: '198.51.100.31', socket: { remoteAddress: '198.51.100.31' }, path: '/api/test', method: 'GET', secure: false });
   assert.equal(allowedRequest.nextCalled, true, 'allowed request must reach the application');
   assert.equal(allowedRequest.response.headers['Cache-Control'], 'no-store');
   middlewareRedis.mode = 'quarantine';

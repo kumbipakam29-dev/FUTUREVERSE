@@ -211,7 +211,7 @@ export class RedisAdaptiveSecurityStore {
 
   private async execute(address: string, action: SharedSecurityAction, isHealth = false): Promise<SharedSecurityDecision> {
     const fingerprint = createSharedClientFingerprint(address, this.secret);
-    const tag = `{{fingerprint}}`;
+    const tag = `{${fingerprint}}`;
     const root = `${this.namespace}:${tag}`;
     const keys = [
       `${root}:requests`,
