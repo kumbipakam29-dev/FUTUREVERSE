@@ -15,7 +15,6 @@ export interface VerifiedOwnerApprovalContext {
 export interface HighRiskApprovalOptions {
   redis: RedisEvalClient;
   namespace?: string;
-  tokenFactory?: () => string;
 }
 
 export interface IssuedHighRiskApproval {
@@ -111,13 +110,11 @@ function canonicalNamespace(namespace: string | undefined): string {
 export class RedisHighRiskApprovalStore {
   private readonly redis: RedisEvalClient;
   private readonly namespace: string;
-  private readonly tokenFactory: () => string;
 
   constructor(options: HighRiskApprovalOptions) {
     if (!options?.redis || typeof options.redis.eval !== 'function') throw new Error('APPROVAL_REDIS_CLIENT_REQUIRED');
     this.redis = options.redis;
     this.namespace = canonicalNamespace(options.namespace);
-    this.tokenFactory = options.tokenFactory || (() => crypto.randomBytes(32).toString('base64url'));
   }
 
   /**
@@ -136,7 +133,7 @@ export class RedisHighRiskApprovalStore {
     validateActorId(authority.actorId);
     validateToolName(toolName);
     const argumentHash = hashHighRiskArguments(args);
-    const token = this.tokenFactory();
+    const token = crypto.randomBytes(32).toString('base64url');
     const digest = tokenDigest(token);
     const key = this.namespace + ':' + digest;
     const payload = JSON.stringify({ actorId: authority.actorId, toolName, argumentHash });
