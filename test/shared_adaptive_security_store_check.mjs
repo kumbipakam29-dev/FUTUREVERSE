@@ -123,6 +123,9 @@ try {
   const allowedRequest = await runMiddleware({ ip: '198.51.100.31', socket: { remoteAddress: '198.51.100.31' }, path: '/api/test', method: 'GET', secure: false });
   assert.equal(allowedRequest.nextCalled, true, 'allowed request must reach the application');
   assert.equal(allowedRequest.response.headers['Cache-Control'], 'no-store');
+  const ownerAuthRequest = await runMiddleware({ ip: '198.51.100.34', socket: { remoteAddress: '198.51.100.34' }, path: '/api/export/owner-authenticate', method: 'POST', secure: false });
+  assert.equal(ownerAuthRequest.nextCalled, true, 'owner authentication route must still be reached through middleware');
+  assert.equal(ownerAuthRequest.response.finishHandler, undefined, 'shared middleware must not use best-effort finish hooks for auth risk telemetry; route code must await the record explicitly');
   middlewareRedis.mode = 'quarantine';
   const blockedRequest = await runMiddleware({ ip: '198.51.100.32', socket: { remoteAddress: '198.51.100.32' }, path: '/api/test', method: 'GET', secure: false });
   assert.equal(blockedRequest.nextCalled, false, 'quarantined request must not reach the application');

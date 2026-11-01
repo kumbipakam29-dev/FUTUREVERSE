@@ -80,3 +80,9 @@ The current v23 candidate does not provide MFA/passkeys, a shared distributed se
 - Mitigate volumetric/high-cardinality floods at CDN/WAF/edge before requests reach the app.
 - Rotate the shared HMAC fingerprint secret only with a coordinated plan: a new secret maps every client to different keys and can make existing quarantine state invisible. Preserve old key mapping until active windows expire or temporarily enforce equivalent edge controls.
 
+
+ 
+### Owner authentication telemetry
+
+Failed owner-auth events must be recorded with an awaited `recordOwnerAuthentication()` call inside the auth route before returning the response. A best-effort `res.finish` callback is not sufficient because a Redis failure happens after the response can no longer be changed. Return generic 503 if the security store cannot persist the failure signal.
+ 

@@ -33,3 +33,20 @@ Adaptive client state is process-local. Multi-replica production requires a shar
 - Use `store.middleware()` instead of the process-local adaptive middleware; do not install both.
 - Redis failures return 503. Never fall back to local memory in shared mode.
 - Full source server integration, production Redis configuration, TLS/ACL, trusted proxy verification, failover/load tests and independent review remain mandatory.
+
+ 
+## Owner-auth route hook
+
+Do not rely on a response `finish` callback for failed-auth telemetry. In the owner-authentication handler, after validating the attempt and before sending a response:
+
+```ts
+try {
+  await sharedStore.recordOwnerAuthentication(req.ip, false);
+} catch {
+  return res.status(503).json({ code: 'SECURITY_STORE_UNAVAILABLE' });
+}
+return res.status(401).json({ error: 'Authentication failed.' });
+```
+
+On successful owner authentication, call `recordOwnerAuthentication(req.ip, true)` only if an audit event is desired; it intentionally does not clear shared-IP failures. The app must use a verified trusted-proxy configuration for `req.ip`. Keep authentication verification and response text generic. This snippet is an integration requirement, not a route already wired into the repository app.
+ 

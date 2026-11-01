@@ -310,16 +310,10 @@ export class RedisAdaptiveSecurityStore {
             return;
           }
         }
-        if (pathname === '/api/export/owner-authenticate' && req.method.toUpperCase() === 'POST') {
-          res.once('finish', () => {
-            const successful = res.statusCode >= 200 && res.statusCode < 300;
-            if (successful || res.statusCode === 401 || res.statusCode === 403 || res.statusCode === 429) {
-              void this.recordOwnerAuthentication(address, successful).catch(() => {
-                // Do not leak connection details or auth context. Redis health monitoring must alert separately.
-              });
-            }
-          });
-        }
+        // Owner-auth route instrumentation must explicitly await recordOwnerAuthentication()
+        // before it sends its response. Fire-and-forget finish hooks can silently lose signals
+        // during Redis outages and must not be presented as durable security telemetry.
+
         next();
       })().catch(() => {
         if (res.headersSent) return;

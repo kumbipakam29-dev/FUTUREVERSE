@@ -66,3 +66,9 @@ Redis becomes a critical dependency. Monitor latency, capacity, failover and ava
 - Fingerprint-secret rotation changes every source key. Rotating it immediately invalidates access to existing rate-limit/quarantine state. Coordinate rotation with edge mitigation or a migration that preserves old fingerprints until active state expires; do not rotate as routine housekeeping.
 - Use a conservative key prefix per environment (for example separate staging and production namespaces). Never share a namespace across unrelated apps or environments.
 
+
+ 
+## Owner-authentication signal recording
+
+The shared middleware deliberately does **not** record authentication outcomes from an asynchronous response `finish` hook. Such a write can fail after the response has already been sent, silently losing the risk signal. The owner-authentication route must call and await `recordOwnerAuthentication(clientIp, false)` before returning a failed-auth response, and await/catch Redis errors as a fail-closed 503. Obtain the IP from Express `req.ip` only after the exact trusted-proxy chain is configured. Do not pass raw client-supplied `X-Forwarded-For`.
+ 
