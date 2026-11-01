@@ -70,3 +70,13 @@ The current v23 candidate does not provide MFA/passkeys, a shared distributed se
 - Dependency/SBOM/secret scanning, full build/typecheck, real HTTP/proxy tests, load tests, and independent penetration testing.
 
 **Never describe the service as non-hackable.** Report measured controls, detected incidents, tested recovery, and known limitations.
+
+ 
+## Redis capacity / fingerprint-secret operations
+
+- Use a dedicated Redis deployment with TLS, ACLs, private ingress, memory alerts and failover tests.
+- Set a memory ceiling with `maxmemory-policy noeviction`; eviction can silently remove active quarantine/rate-limit state. A full store should cause explicit 503 responses, paging and edge mitigation—not a weaker local fallback.
+- Monitor total keys, memory, keyspace growth by prefix, latency, rejected writes and connection backlog. Per-source bounded counters do not prevent high-cardinality source-IP key creation.
+- Mitigate volumetric/high-cardinality floods at CDN/WAF/edge before requests reach the app.
+- Rotate the shared HMAC fingerprint secret only with a coordinated plan: a new secret maps every client to different keys and can make existing quarantine state invisible. Preserve old key mapping until active windows expire or temporarily enforce equivalent edge controls.
+

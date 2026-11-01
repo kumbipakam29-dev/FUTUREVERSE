@@ -55,3 +55,14 @@ Successful login does not clear source failures because another user behind the 
 - Global posture aggregation is not included; event lists are per source and need a separate privacy-safe metrics pipeline.
 
 Redis becomes a critical dependency. Monitor latency, capacity, failover and availability. This does not replace WAF/CDN, DDoS controls, MFA, route authorization, patching, host isolation, backup/restore, dependency scanning or independent penetration testing. No system is non-hackable.
+
+ 
+## Redis operational safety requirements
+
+- Run this store on a dedicated/private Redis deployment with TLS, ACLs, firewall/network controls, capacity alerts and tested failover.
+- Configure a deliberate memory ceiling and `maxmemory-policy noeviction`. Do **not** use an eviction policy that can silently remove active rate-limit or quarantine keys. On write-capacity exhaustion, the adapter fails closed with 503; page the operator and scale/mitigate at the edge.
+- Apply connection, command-timeout and client-side queue limits in the host Redis client. Avoid unbounded pending requests when Redis is slow.
+- A stream of many distinct source IPs can still create high-cardinality keys; per-source caps do not bound total Redis cardinality. Put volumetric and IP-cardinality controls at the CDN/WAF/edge, and monitor key count, memory, rejected writes and latency.
+- Fingerprint-secret rotation changes every source key. Rotating it immediately invalidates access to existing rate-limit/quarantine state. Coordinate rotation with edge mitigation or a migration that preserves old fingerprints until active state expires; do not rotate as routine housekeeping.
+- Use a conservative key prefix per environment (for example separate staging and production namespaces). Never share a namespace across unrelated apps or environments.
+

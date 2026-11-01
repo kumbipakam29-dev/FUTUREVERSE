@@ -22,3 +22,9 @@ This does not implement MFA/passkeys or replace the existing tool approval guard
 ## Consumption-time authority check
 
 The shared approval store now requires a currently verified owner-session context with `APPROVE_HIGH_RISK_ACTIONS` both when issuing **and** consuming a token. The caller must derive that context from the active server-side session; never accept `ownerSessionVerified`, `actorId` or permissions from request JSON. The one-time token still binds actor, tool and canonical arguments, and is atomically deleted only after an exact match. Canonical JSON rejects accessor properties, sparse arrays, cycles, non-JSON objects, excessive depth and excessive node count before hashing.
+
+ 
+## Application caller security boundary
+
+The storage primitive accepts a `VerifiedOwnerApprovalContext`, but it cannot independently prove that a caller's object came from a valid session. The complete application must construct this object only from the server-side authenticated session and current permission lookup; never copy these fields from request JSON, query parameters, cookies or client-side state. Re-check session validity and permission immediately before calling `consumeApproval`. Bind the approval to the exact tool and canonical arguments, and execute the tool only after consumption returns `CONSUMED`. If execution fails after consumption, require a new human approval rather than reusing the old token.
+

@@ -71,3 +71,10 @@ The existing security review PR #2 remains draft/unmerged and main was not chang
 - High-risk approval consumption now requires a currently verified owner session and `APPROVE_HIGH_RISK_ACTIONS`, not merely an actor ID passed to the storage method.
 - Canonical approval arguments now reject getters/accessors, sparse arrays, cycles, non-JSON values, excessive nesting and excessive node counts before hashing.
 - Full server wiring and deployment remain unverified; these are storage primitives on the review branch.
+
+ 
+## v24.2 — Redis operations and trust boundary clarified
+
+- Added explicit Redis `noeviction`, capacity, key-cardinality, timeout and private-network operating requirements. Active security keys must not be silently evicted.
+- Documented that fingerprint-secret rotation changes source-key identity and may make active quarantine state invisible; rotation now requires a coordinated migration/edge mitigation plan.
+- Clarified that the Redis approval store is a storage primitive: the real application must derive the verification context from the server-side session, never client-supplied fields, and must re-check permission immediately before consuming.
