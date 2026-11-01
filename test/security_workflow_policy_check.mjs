@@ -15,4 +15,4 @@ assert.match(workflow, /redis-server --port 6389/, 'CI must start an isolated Re
 assert.match(workflow, /FV_TEST_REDIS: '1'/, 'CI must enable real Redis integration');
 assert.doesNotMatch(workflow, /pull_request_target/, 'untrusted pull-request code must not run in a privileged workflow');
 assert.doesNotMatch(workflow, /secrets\./, 'test workflow must not consume repository secrets');
-console.log('SECURITY_WORKFLOW_POLICY_CHECK=PASS (14 assertions)');
+console.log('SECURITY_WORKFLOW_POLICY_CHECK=PASS (13 assertions)');
