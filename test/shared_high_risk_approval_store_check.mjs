@@ -25,6 +25,7 @@ try {
     HIGH_RISK_APPROVAL_ISSUE_LUA,
     HIGH_RISK_APPROVAL_CONSUME_LUA,
     hashHighRiskArguments,
+    snapshotHighRiskArguments,
   } = await import(pathToFileURL(modulePath).href);
 
   const authority = { ownerSessionVerified: true, permissions: ['APPROVE_HIGH_RISK_ACTIONS'], actorId: 'owner-verified-01' };
@@ -58,6 +59,15 @@ try {
   await assert.rejects(() => replicaA.issueApproval({ ownerSessionVerified: true, permissions: [], actorId: 'owner-verified-01' }, 'publish.post', args), /PERMISSION_REQUIRED/);
   assert.equal(hashHighRiskArguments({ a: 1, b: { y: 2, x: 3 } }), hashHighRiskArguments({ b: { x: 3, y: 2 }, a: 1 }), 'argument hash must be independent of object insertion order');
   assert.throws(() => hashHighRiskArguments({ value: Number.NaN }), /NUMBER_INVALID/);
+  assert.throws(() => hashHighRiskArguments({ value: -0 }), /NEGATIVE_ZERO_INVALID/);
+  const hiddenProperty = {};
+  Object.defineProperty(hiddenProperty, 'amount', { value: 10, enumerable: false });
+  assert.throws(() => hashHighRiskArguments(hiddenProperty), /NON_ENUMERABLE_PROPERTY_INVALID/);
+  const immutableSnapshot = snapshotHighRiskArguments(args);
+  assert.notEqual(immutableSnapshot, args, 'approved execution args must be a detached snapshot');
+  assert.ok(Object.isFrozen(immutableSnapshot), 'approved execution snapshot root must be frozen');
+  assert.ok(Object.isFrozen(immutableSnapshot.options), 'approved execution snapshot must be deeply frozen');
+  assert.equal(hashHighRiskArguments(immutableSnapshot), hashHighRiskArguments(args), 'snapshot must preserve the canonical approved argument hash');
   const cyclic = {}; cyclic.self = cyclic;
   assert.throws(() => hashHighRiskArguments(cyclic), /CYCLE_DETECTED/);
   const sparse = new Array(2);
@@ -91,6 +101,25 @@ try {
   assert.equal(await replicaB.consumeApproval(issued.token, authority, 'publish.post', { options: { pinned: false, visibility: 'public' }, content: 'Reviewed announcement', destination: 'approved-channel' }), 'CONSUMED', 'different replicas and equivalent canonical argument ordering must consume the same approval');
   assert.equal(records.size, 0);
   assert.equal(await replicaA.consumeApproval(issued.token, authority, 'publish.post', args), 'NOT_FOUND_OR_EXPIRED', 'approval replay must fail');
+
+  const raceArgs = { action: 'publish', payload: 'original' };
+  const raceIssued = await replicaA.issueApproval(authority, 'publish.post', raceArgs);
+  const baseEval = fakeRedis.eval.bind(fakeRedis);
+  let allowConsumeToFinish;
+  fakeRedis.eval = async (script, numberOfKeys, ...callArgs) => {
+    if (script === HIGH_RISK_APPROVAL_CONSUME_LUA) {
+      const consumedResult = await baseEval(script, numberOfKeys, ...callArgs);
+      await new Promise((resolve) => { allowConsumeToFinish = resolve; });
+      return consumedResult;
+    }
+    return baseEval(script, numberOfKeys, ...callArgs);
+  };
+  const pendingConsume = replicaB.consumeApproval(raceIssued.token, authority, 'publish.post', raceArgs);
+  await new Promise((resolve) => setImmediate(resolve));
+  raceArgs.payload = 'mutated-during-redis-await';
+  allowConsumeToFinish();
+  assert.equal(await pendingConsume, 'BINDING_MISMATCH', 'mutating arguments while Redis is awaiting must not authorize changed execution data');
+  fakeRedis.eval = baseEval;
 
   const broken = new RedisHighRiskApprovalStore({ ...options, redis: { eval: async () => { throw new Error('redis unavailable'); } } });
   await assert.rejects(() => broken.issueApproval(authority, 'publish.post', args), /redis unavailable/, 'store outages must propagate and must not fall back to local memory');

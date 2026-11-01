@@ -70,6 +70,7 @@ function canonicalJson(
   if (typeof value === 'boolean') return JSON.stringify(value);
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new Error('APPROVAL_ARGUMENT_NUMBER_INVALID');
+    if (Object.is(value, -0)) throw new Error('APPROVAL_ARGUMENT_NEGATIVE_ZERO_INVALID');
     return JSON.stringify(value);
   }
 
@@ -98,8 +99,10 @@ function canonicalJson(
     const prototype = Object.getPrototypeOf(objectValue);
     if (prototype !== Object.prototype && prototype !== null) throw new Error('APPROVAL_ARGUMENT_OBJECT_TYPE_INVALID');
     if (seen.has(objectValue)) throw new Error('APPROVAL_ARGUMENT_CYCLE_DETECTED');
-    if (Reflect.ownKeys(objectValue).some((key) => typeof key === 'symbol')) throw new Error('APPROVAL_ARGUMENT_SYMBOL_KEY_INVALID');
+    const ownKeys = Reflect.ownKeys(objectValue);
+    if (ownKeys.some((key) => typeof key === 'symbol')) throw new Error('APPROVAL_ARGUMENT_SYMBOL_KEY_INVALID');
     const keys = Object.keys(objectValue).sort();
+    if (ownKeys.length !== keys.length) throw new Error('APPROVAL_ARGUMENT_NON_ENUMERABLE_PROPERTY_INVALID');
     if (keys.length > MAX_ARGUMENT_NODES) throw new Error('APPROVAL_ARGUMENT_NODE_LIMIT');
     seen.add(objectValue);
     const entries: string[] = [];
@@ -121,6 +124,23 @@ export function hashHighRiskArguments(args: unknown): string {
   const canonical = canonicalJson(args);
   if (Buffer.byteLength(canonical, 'utf8') > MAX_ARGUMENT_BYTES) throw new Error('APPROVAL_ARGUMENTS_TOO_LARGE');
   return crypto.createHash('sha256').update(canonical, 'utf8').digest('hex');
+}
+
+/**
+ * Produce a JSON-only, deeply frozen snapshot. Use this exact snapshot for approval
+ * issuance, consumption and eventual tool execution; never execute the caller's mutable
+ * original object after approval.
+ */
+export function snapshotHighRiskArguments<T>(args: T): Readonly<T> {
+  const canonical = canonicalJson(args);
+  if (Buffer.byteLength(canonical, 'utf8') > MAX_ARGUMENT_BYTES) throw new Error('APPROVAL_ARGUMENTS_TOO_LARGE');
+  const snapshot: unknown = JSON.parse(canonical);
+  const freezeDeep = (value: unknown): unknown => {
+    if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return value;
+    for (const key of Object.keys(value)) freezeDeep((value as Record<string, unknown>)[key]);
+    return Object.freeze(value);
+  };
+  return freezeDeep(snapshot) as Readonly<T>;
 }
 
 function validateActorId(actorId: string): void {
@@ -208,6 +228,9 @@ export class RedisHighRiskApprovalStore {
       toolName,
       argumentHash,
     ));
+    // Detect mutation while Redis was awaiting the atomic consume. The token may have been
+    // consumed, but returning a mismatch prevents execution with data different from approval.
+    if (hashHighRiskArguments(args) !== argumentHash) return 'BINDING_MISMATCH';
     if (result === 1) return 'CONSUMED';
     if (result === -1) return 'BINDING_MISMATCH';
     if (result === 0) return 'NOT_FOUND_OR_EXPIRED';

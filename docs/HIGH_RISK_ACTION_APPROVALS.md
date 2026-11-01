@@ -28,3 +28,10 @@ The shared approval store now requires a currently verified owner-session contex
 
 The storage primitive accepts a `VerifiedOwnerApprovalContext`, but it cannot independently prove that a caller's object came from a valid session. The complete application must construct this object only from the server-side authenticated session and current permission lookup; never copy these fields from request JSON, query parameters, cookies or client-side state. Re-check session validity and permission immediately before calling `consumeApproval`. Bind the approval to the exact tool and canonical arguments, and execute the tool only after consumption returns `CONSUMED`. If execution fails after consumption, require a new human approval rather than reusing the old token.
 
+
+
+## Immutable execution snapshot
+
+Use `snapshotHighRiskArguments(args)` to create a JSON-only, detached, deeply frozen argument object. Use that exact snapshot when issuing the approval, consuming it, and executing the tool. Do not execute the original mutable request object. `consumeApproval()` also re-hashes after Redis returns and refuses success if the argument object changed while the store operation was pending. A mutation detected after atomic consumption burns that one-time approval; obtain a new human approval.
+
+Canonicalization rejects non-enumerable properties and negative zero as well as getters/accessors, sparse arrays, cycles, non-JSON objects, excessive depth and excessive node counts. These restrictions prevent semantically relevant properties from being omitted from the approval hash.
