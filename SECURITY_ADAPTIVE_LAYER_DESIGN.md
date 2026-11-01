@@ -31,6 +31,6 @@ Policy is immutable at runtime. Client-supplied data and AI agents cannot weaken
 - No autonomous code, route, secret, owner-record, or policy mutation is allowed.
 - The `/api/health` monitoring route is excluded from the normal per-client API budget so monitoring cannot exhaust user quotas. Repeated TRACE/TRACK/CONNECT attempts count as source probe signals. State is process-local and resets on restart. Multi-replica deployment needs shared atomic rate-limit storage and consistent trusted proxy configuration.
 - This app-level layer does not replace a WAF/CDN, DDoS controls, host/container isolation, MFA/passkeys, database authorization, external immutable logs, backups, patching, dependency scanning, or independent penetration testing.
-- Verify proxy/HSTS behaviour and browser CSP separately. Full build, semantic typecheck, HTTP integration behind the real proxy, multi-process tests, load tests, dependency audit, and external security review are still required.
+- Verify proxy/HSTS behaviour and browser CSP separately. Full build, semantic typecheck, live HTTP/browser CSRF integration, proxy integration, multi-process tests, load tests, dependency audit, and external security review are still required.
 
 No system should be marketed as impossible to hack. The goal is layered prevention, detection, containment, recovery, and evidence.

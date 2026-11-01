@@ -209,6 +209,23 @@ export class AdaptiveSecurityService {
       res.setHeader('Referrer-Policy', 'no-referrer');
       res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
       res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+      // Begin with report-only CSP. Review browser violations before enforcement.
+      if (process.env.NODE_ENV === 'production') {
+        res.setHeader('Content-Security-Policy-Report-Only', [
+          "default-src 'self'",
+          "base-uri 'self'",
+          "object-src 'none'",
+          "frame-ancestors 'none'",
+          "form-action 'self'",
+          "script-src 'self'",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+          "font-src 'self' https://fonts.gstatic.com data:",
+          "img-src 'self' data: blob: https://images.unsplash.com",
+          "connect-src 'self' https://rpc.yagyx.network https://explorer.yagyx.network",
+          "worker-src 'self' blob:",
+          "frame-src 'none'",
+        ].join('; '));
+      }
       if (isApi) res.setHeader('Cache-Control', 'no-store');
       if (process.env.NODE_ENV === 'production' && req.secure) {
         res.setHeader('Strict-Transport-Security', 'max-age=31536000');
