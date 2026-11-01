@@ -72,7 +72,36 @@ try {
   assert.equal(response.headers['X-Frame-Options'], 'DENY');
   assert.equal(response.headers['Referrer-Policy'], 'no-referrer');
 
+  // Flood-style regression: per-client rolling timestamp arrays must remain bounded.
+  const floodShield = new AdaptiveSecurityService();
+  for (let i = 0; i < 25_000; i++) {
+    floodShield.recordProbe('192.0.2.88', '/.env');
+    floodShield.recordOwnerAuthentication('192.0.2.89', false);
+  }
+  const floodClients = [...floodShield.clients.values()];
+  assert.ok(floodClients.every((state) => state.probes.length <= 8), 'probe timestamp storage must be bounded');
+  assert.ok(floodClients.every((state) => state.authFailures.length <= 10), 'auth-failure timestamp storage must be bounded');
+
+  const apiFloodShield = new AdaptiveSecurityService();
+  const apiFloodResponse = {
+    headers: {}, statusCode: 200,
+    setHeader(name, value) { this.headers[name] = value; return this; },
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+    once() { return this; },
+  };
+  const apiFloodMiddleware = apiFloodShield.middleware();
+  for (let i = 0; i < 25_000; i++) {
+    apiFloodResponse.statusCode = 200;
+    apiFloodMiddleware({ ip: '198.51.100.199', socket: { remoteAddress: '198.51.100.199' }, path: '/api/ping', method: 'GET', secure: false }, apiFloodResponse, () => {});
+  }
+  const apiFloodState = [...apiFloodShield.clients.values()][0];
+  assert.ok(apiFloodState.apiRequests.length <= SECURITY_LAYER_POLICY.BASELINE.maxApiRequestsPerMinute + 1, 'API request timestamp storage must be bounded');
+  assert.ok(apiFloodState.rateLimitEvents.length <= 8, 'rate-limit timestamp storage must be bounded');
+
+
   console.log('ADAPTIVE_SECURITY_LAYER_CHECK=PASS');
+  console.log('Verified bounded timestamp arrays under 25,000 repeated probe/auth/API-flood signals.');
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
 }

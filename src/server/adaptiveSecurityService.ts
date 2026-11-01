@@ -68,6 +68,12 @@ function keepRecent(values: number[], now: number, windowMs: number): number[] {
   return values;
 }
 
+/** Cap timestamp samples at saturation so request floods cannot grow memory without bound. */
+function pushRecentBounded(values: number[], timestamp: number, maxEntries: number): void {
+  values.push(timestamp);
+  if (values.length > maxEntries) values.splice(0, values.length - maxEntries);
+}
+
 function safeRoute(pathname: string): string {
   // Keep only coarse route classes. Resource IDs and user-controlled path fragments are not logged.
   if (pathname === '/api/export/owner-authenticate') return pathname;
@@ -143,14 +149,14 @@ export class AdaptiveSecurityService {
       state.authFailures.length = 0;
       return;
     }
-    state.authFailures.push(now);
+    pushRecentBounded(state.authFailures, now, 10);
     const layer = this.layerForState(state, now);
     this.appendEvent(key, 'OWNER_AUTH_FAILURE', layer, route);
   }
 
   public recordProbe(address: string, route: string): SecurityLayer {
     const { key, state } = this.stateFor(address);
-    state.probes.push(Date.now());
+    pushRecentBounded(state.probes, Date.now(), 8);
     const layer = this.layerForState(state, Date.now());
     this.appendEvent(key, 'PROBE_PATH', layer, route);
     return layer;
@@ -209,7 +215,7 @@ export class AdaptiveSecurityService {
       }
 
       if (isApi) {
-        state.apiRequests.push(now);
+        pushRecentBounded(state.apiRequests, now, SECURITY_LAYER_POLICY.BASELINE.maxApiRequestsPerMinute + 1);
         keepRecent(state.apiRequests, now, WINDOW_MS);
         const layer = this.layerForState(state, now);
         if (layer === 'QUARANTINE' && pathname !== '/api/health') {
@@ -218,7 +224,7 @@ export class AdaptiveSecurityService {
         }
         const maxRequests = SECURITY_LAYER_POLICY[layer].maxApiRequestsPerMinute;
         if (pathname !== '/api/health' && state.apiRequests.length > maxRequests) {
-          state.rateLimitEvents.push(now);
+          pushRecentBounded(state.rateLimitEvents, now, 8);
           const escalatedLayer = this.layerForState(state, now);
           this.appendEvent(key, 'RATE_LIMIT', escalatedLayer, pathname);
           res.setHeader('Retry-After', '60');

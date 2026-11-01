@@ -27,7 +27,7 @@ Policy is immutable at runtime. Client-supplied data and AI agents cannot weaken
 
 - Escalation is per pseudonymous client fingerprint, not global; one attacker cannot lock out all users.
 - Event records omit raw IPs, request bodies, credentials, cookies, query strings, and resource IDs. Client fingerprints use a process-ephemeral HMAC salt.
-- State and event buffers are bounded.
+- State and event buffers are bounded. Per-client rolling timestamp arrays are capped at saturation thresholds (181 API samples, 10 auth failures, 8 probes, 8 rate-limit events), preventing request floods from growing timestamp storage without bound.
 - No autonomous code, route, secret, owner-record, or policy mutation is allowed.
 - State is process-local and resets on restart. Multi-replica deployment needs shared atomic rate-limit storage and consistent trusted proxy configuration.
 - This app-level layer does not replace a WAF/CDN, DDoS controls, host/container isolation, MFA/passkeys, database authorization, external immutable logs, backups, patching, dependency scanning, or independent penetration testing.
